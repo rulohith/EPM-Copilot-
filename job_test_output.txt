@@ -1,0 +1,162 @@
+Submitting jobType=EXPORT_METADATA jobName='Export Account'
+Payload: {"jobType": "EXPORT_METADATA", "jobName": "Export Account", "parameters": {"exportZipFileName": "Export_Account.zip"}}
+Downloaded ZIP to: C:\Users\rulohith\Downloads\Hackathon_OCI (2)\Hackathon_OCI\Export_Account.zip
+[MERGE] Processing exported CSV 'ankita.roy@oracle.com_ExportedMetadata_Measures.csv' using workbook 'AccountsToBeAdded.xlsx'
+[MERGE] Reading CSV: ankita.roy@oracle.com_ExportedMetadata_Measures.csv
+[MERGE] Source workbook: AccountsToBeAdded.xlsx | Target mode: ACCOUNT
+[SKIP] Excel row 3: exact match already exists -> member='TCFD_11', parent='TCFD Reporting', third_field='New TCFD Line 1'
+[SKIP] Excel row 4: exact match already exists -> member='TCFD_12', parent='TCFD Reporting', third_field='New TCFD Line 2'
+[SKIP] Excel row 5: exact match already exists -> member='TCFD_13', parent='TCFD Reporting', third_field='New TCFD Line 3'
+[SKIP] Excel row 6: exact match already exists -> member='TCFD_14', parent='TCFD Reporting', third_field='New TCFD Line 4'
+[SKIP] Excel row 7: exact match already exists -> member='TCFD_15', parent='TCFD Reporting', third_field='New TCFD Line 5'
+[SKIP] Excel row 8: exact match already exists -> member='TCFD_16', parent='TCFD Reporting', third_field='New TCFD Line 6'
+[SKIP] Excel row 9: exact match already exists -> member='TCFD_17', parent='TCFD Reporting', third_field='New TCFD Line 7'
+[SKIP] Excel row 10: exact match already exists -> member='TCFD_18', parent='TCFD Reporting', third_field='New TCFD Line 8'
+[SKIP] Excel row 11: exact match already exists -> member='TCFD_19', parent='TCFD Reporting', third_field='New TCFD Line 9'
+[SKIP] Excel row 12: exact match already exists -> member='TCFD_20', parent='TCFD Reporting', third_field='New TCFD Line 10'
+[SKIP] Excel row 13: empty row
+[SKIP] Excel row 14: empty row
+[SKIP] Excel row 15: empty row
+[SKIP] Excel row 16: empty row
+[SKIP] Excel row 17: empty row
+[SKIP] Excel row 18: empty row
+[SKIP] Excel row 19: empty row
+[SKIP] Excel row 20: empty row
+[SKIP] Excel row 21: empty row
+[SKIP] Excel row 22: empty row
+[SKIP] Excel row 23: empty row
+[SKIP] Excel row 24: parent not found in CSV -> parent=''
+[INSERT] Excel row 25: added new row -> member='newTCFD_11.2', parent='TCFD Reporting', third_field='TCFD_11.2'
+Inserted 1 rows from AccountsToBeAdded.xlsx
+Updated 0 existing rows from AccountsToBeAdded.xlsx
+Skipped 22 Excel rows
+CSV changed: True
+Updated CSV and repackaged ZIP: C:\Users\rulohith\Downloads\Hackathon_OCI (2)\Hackathon_OCI\Export_Account.zip
+Uploaded updated ZIP back to repository as: Export_Account.zip
+Export Account job completed successfully.
+{
+  "links": [
+    {
+      "rel": "self",
+      "href": "https://epm10207ar-demoepm0207.epm.us-phoenix-1.ocs.oraclecloud.com:443/HyperionPlanning/rest/v3/applications/ORA_ESG/jobs/457",
+      "action": "GET"
+    },
+    {
+      "rel": "job-details",
+      "href": "https://epm10207ar-demoepm0207.epm.us-phoenix-1.ocs.oraclecloud.com:443/HyperionPlanning/rest/v3/applications/ORA_ESG/jobs/457/details",
+      "action": "GET"
+    }
+  ],
+  "descriptiveStatus": "Completed",
+  "status": 0,
+  "detailedStatus": 2,
+  "jobId": 457,
+  "jobName": "Export Account",
+  "details": "Metadata export was successful"
+}
+Submitting jobType=IMPORT_METADATA jobName='Import Account'
+Payload: {"jobType": "IMPORT_METADATA", "jobName": "Import Account", "parameters": {"importZipFileName": "Export_Account.zip", "errorFile": "Error_Log.zip", "refreshDatabase": "true"}}
+Import metadata job completed.
+Import Account job completed successfully.
+{
+  "links": [
+    {
+      "rel": "self",
+      "href": "https://epm10207ar-demoepm0207.epm.us-phoenix-1.ocs.oraclecloud.com:443/HyperionPlanning/rest/v3/applications/ORA_ESG/jobs/459",
+      "action": "GET"
+    },
+    {
+      "rel": "job-details",
+      "href": "https://epm10207ar-demoepm0207.epm.us-phoenix-1.ocs.oraclecloud.com:443/HyperionPlanning/rest/v3/applications/ORA_ESG/jobs/459/details",
+      "action": "GET"
+    }
+  ],
+  "descriptiveStatus": "Completed",
+  "status": 0,
+  "detailedStatus": 2,
+  "jobId": 459,
+  "jobName": "Import Account",
+  "details": "Metadata import was successful",
+  "oluLoadId": "94"
+}
+Submitting jobType=EXPORT_METADATA jobName='Export LOB'
+Payload: {"jobType": "EXPORT_METADATA", "jobName": "Export LOB", "parameters": {"exportZipFileName": "Export_LOB.zip"}}
+Downloaded ZIP to: C:\Users\rulohith\Downloads\Hackathon_OCI (2)\Hackathon_OCI\Export_LOB.zip
+[MERGE] Processing exported CSV 'ankita.roy@oracle.com_ExportedMetadata_LOB.csv' using workbook 'LOBsToBeAdded.xlsx'
+[MERGE] Reading CSV: ankita.roy@oracle.com_ExportedMetadata_LOB.csv
+[MERGE] Source workbook: LOBsToBeAdded.xlsx | Target mode: LOB
+[MERGE] LOB member prefix will be applied as needed: LOB_
+[NORM] Excel row 3: member normalized from 'ABC' to 'LOB_ABC'
+[SKIP] Excel row 3: exact match already exists -> member='LOB_ABC', parent='Total Division', third_field='ru2'
+[NORM] Excel row 4: member normalized from 'New_LOB_679' to 'LOB_New_LOB_679'
+[SKIP] Excel row 4: exact match already exists -> member='LOB_New_LOB_679', parent='Total Division', third_field='ru3'
+[NORM] Excel row 5: member normalized from 'New_LOB_680' to 'LOB_New_LOB_680'
+[SKIP] Excel row 5: exact match already exists -> member='LOB_New_LOB_680', parent='Total Division', third_field='ru4'
+[NORM] Excel row 6: member normalized from 'New_LOB_681' to 'LOB_New_LOB_681'
+[SKIP] Excel row 6: exact match already exists -> member='LOB_New_LOB_681', parent='Total Division', third_field='ru5'
+[NORM] Excel row 7: member normalized from 'New_LOB_682' to 'LOB_New_LOB_682'
+[SKIP] Excel row 7: exact match already exists -> member='LOB_New_LOB_682', parent='Total Division', third_field='ru6'
+[NORM] Excel row 8: member normalized from 'New_LOB_683' to 'LOB_New_LOB_683'
+[SKIP] Excel row 8: exact match already exists -> member='LOB_New_LOB_683', parent='Total Division', third_field='ru7'
+[NORM] Excel row 9: member normalized from 'New_LOB_684' to 'LOB_New_LOB_684'
+[SKIP] Excel row 9: exact match already exists -> member='LOB_New_LOB_684', parent='Total Division', third_field='ru8'
+[NORM] Excel row 10: member normalized from 'New_LOB_685' to 'LOB_New_LOB_685'
+[SKIP] Excel row 10: exact match already exists -> member='LOB_New_LOB_685', parent='Total Division', third_field='ru9'
+[NORM] Excel row 11: member normalized from 'New_LOB_686' to 'LOB_New_LOB_686'
+[SKIP] Excel row 11: exact match already exists -> member='LOB_New_LOB_686', parent='Total Division', third_field='ru10'
+[NORM] Excel row 12: member normalized from 'New_LOB_687' to 'LOB_New_LOB_687'
+[SKIP] Excel row 12: exact match already exists -> member='LOB_New_LOB_687', parent='Total Division', third_field='ru11'
+[NORM] Excel row 13: member normalized from 'New1.10' to 'LOB_New1.10'
+[SKIP] Excel row 13: exact match already exists -> member='LOB_New1.10', parent='Total Division', third_field='ThailandCity'
+Inserted 0 rows from LOBsToBeAdded.xlsx
+Updated 0 existing rows from LOBsToBeAdded.xlsx
+Skipped 11 Excel rows
+CSV changed: False
+Updated CSV and repackaged ZIP: C:\Users\rulohith\Downloads\Hackathon_OCI (2)\Hackathon_OCI\Export_LOB.zip
+No CSV changes detected. Skipping upload. Import job will still run.
+Export LOB job completed successfully.
+{
+  "links": [
+    {
+      "rel": "self",
+      "href": "https://epm10207ar-demoepm0207.epm.us-phoenix-1.ocs.oraclecloud.com:443/HyperionPlanning/rest/v3/applications/ORA_ESG/jobs/462",
+      "action": "GET"
+    },
+    {
+      "rel": "job-details",
+      "href": "https://epm10207ar-demoepm0207.epm.us-phoenix-1.ocs.oraclecloud.com:443/HyperionPlanning/rest/v3/applications/ORA_ESG/jobs/462/details",
+      "action": "GET"
+    }
+  ],
+  "descriptiveStatus": "Completed",
+  "status": 0,
+  "detailedStatus": 2,
+  "jobId": 462,
+  "jobName": "Export LOB",
+  "details": "Metadata export was successful"
+}
+Submitting jobType=IMPORT_METADATA jobName='Import LOB'
+Payload: {"jobType": "IMPORT_METADATA", "jobName": "Import LOB", "parameters": {"importZipFileName": "Export_LOB.zip", "errorFile": "Error_Log.zip", "refreshDatabase": "true"}}
+Import metadata job completed.
+Import LOB job completed successfully.
+{
+  "links": [
+    {
+      "rel": "self",
+      "href": "https://epm10207ar-demoepm0207.epm.us-phoenix-1.ocs.oraclecloud.com:443/HyperionPlanning/rest/v3/applications/ORA_ESG/jobs/464",
+      "action": "GET"
+    },
+    {
+      "rel": "job-details",
+      "href": "https://epm10207ar-demoepm0207.epm.us-phoenix-1.ocs.oraclecloud.com:443/HyperionPlanning/rest/v3/applications/ORA_ESG/jobs/464/details",
+      "action": "GET"
+    }
+  ],
+  "descriptiveStatus": "Completed",
+  "status": 0,
+  "detailedStatus": 2,
+  "jobId": 464,
+  "jobName": "Import LOB",
+  "details": "Metadata import was successful",
+  "oluLoadId": "96"
+}

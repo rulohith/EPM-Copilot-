@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Environment files
+.env
+
+# Streamlit and app logs
+*.log
+streamlit_*_stdout.log
+streamlit_*_stderr.log
+streamlit_stdout.log
+streamlit_stderr.log
+streamlit_run_stdout.log
+streamlit_run_stderr.log
+
+# Editor settings
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Excel temporary files
+~$*.xlsx
+~$*.xls
+
+# Archives and generated artifacts
+*.zip
+*.tar.gz
+
+# Python cache/tooling
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/

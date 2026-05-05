@@ -1,0 +1,40 @@
+# Permanent rule: trigger metadata update script when user provides a prompt to add a member under a parent with a description
+# or when user asks to change the description for a member-parent combination.
+# The rule format follows a simple trigger-action pattern used by Cline.
+# Trigger patterns (case-insensitive):
+#   - "add * member" AND "* parent" AND "* description"
+#   - "change description" AND "member" AND "parent"
+# Action: execute the Python script `Update_Metadata_With_Prompt.py` with the provided prompt.
+# Implementation note: Cline should invoke the script via the existing wrapper `run_update_prompt.py`.
+RULE "add_member_with_description_or_change_description" {
+    trigger: /add\s+\w+\s+member.*parent.*description|change\s+description.*member.*parent/i
+    action: "python run_update_prompt.py --prompt '{{prompt}}'"
+}
+
+# Rule to handle adding a member with parent and description specifically for the ACCOUNT dimension.
+# This ensures the AccountsToBeAdded.xlsx file is updated (via the provided utility script) before
+# invoking the metadata update process.
+RULE "add_member_account_dimension" {
+    trigger: /add\s+.*member.*parent.*description.*account\s+dimension/i
+    action: "python edit_accounts_excel.py && python run_update_prompt.py --prompt '{{prompt}}'"
+}
+
+# Rule to handle adding a member with parent and description specifically for the LOB dimension.
+# This updates the LOBsToBeAdded.xlsx file first, then runs the metadata update script.
+RULE "add_member_lob_dimension" {
+    trigger: /add\s+.*member.*parent.*description.*lob\s+dimension/i
+    action: "python edit_lob_excel.py && python run_update_prompt.py --prompt '{{prompt}}'"
+}
+
+# Additional rule: Trigger the metadata update script for any prompt that requests adding a member
+# in a specific dimension (ACCOUNT or LOB) or changing a member's description, regardless of wording.
+RULE "generic_add_or_change_member" {
+    trigger: /add\s+\w+\s+member.*dimension|change\s+description.*member/i
+    action: "python run_update_prompt.py --prompt '{{prompt}}'"
+}
+
+// Trigger the metadata update script for any description change request within any dimension.
+RULE "change_description_any_dimension" {
+    trigger: /change\s+description.*dimension/i
+    action: "python run_update_prompt.py --prompt '{{prompt}}'"
+}
