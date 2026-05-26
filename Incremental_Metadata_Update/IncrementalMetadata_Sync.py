@@ -26,6 +26,7 @@ logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 DEFAULT_TEMPLATE_CSV_REL_PATH = Path("Files") / "Metadata_Template.csv"
 DEFAULT_CUBE_NAME = "OEP_FS"
+STARTUP_INSTRUCTION_MD_REL_PATH = Path("Human_Validation_Instruction.md")
 
 class IncrementalMetadataSyncError(RuntimeError):
     """Raised for functional failures in incremental metadata sync."""
@@ -155,6 +156,151 @@ def _resolve_default_template_path() -> Path:
 
 def _resolve_cube_name() -> str:
     return (os.getenv("EPBCS_CUBE_NAME") or DEFAULT_CUBE_NAME).strip()
+
+def _read_startup_instruction_markdown(
+    instruction_md_path: str | None = None,
+) -> tuple[Path, str]:
+    """
+    Read the human-validation instruction markdown as a mandatory first step.
+
+    This is intentionally blocking for misconfiguration: if the instruction file
+    is missing or empty, execution must stop before any EPBCS sync steps run.
+    """
+    if instruction_md_path:
+        path = Path(instruction_md_path).expanduser()
+        if not path.is_absolute():
+            path = (Path.cwd() / path).resolve()
+        else:
+            path = path.resolve()
+    else:
+        path = (Path.cwd() / STARTUP_INSTRUCTION_MD_REL_PATH).resolve()
+
+    if not path.exists():
+        raise IncrementalMetadataSyncError(
+            "Startup human-validation instruction markdown not found. "
+            f"Expected file: {path}. Create this file before running sync.",
+            error_code="STARTUP_INSTRUCTION_FILE_MISSING",
+            exit_code=27,
+        )
+
+    try:
+        content = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise IncrementalMetadataSyncError(
+            f"Could not read startup instruction markdown at {path}: {exc}",
+            error_code="STARTUP_INSTRUCTION_FILE_READ_ERROR",
+            exit_code=28,
+        ) from exc
+
+    if not content.strip():
+        raise IncrementalMetadataSyncError(
+            f"Startup human-validation instruction markdown is empty: {path}",
+            error_code="STARTUP_INSTRUCTION_FILE_EMPTY",
+            exit_code=29,
+        )
+    return path, content
+
+def _normalize_source_csv_file_name(source_csv_path: str) -> str:
+    raw_value = (source_csv_path or "").strip()
+    if not raw_value:
+        raise IncrementalMetadataSyncError(
+            "Missing source CSV file name. Pass only the CSV file name available in Inbox/Outbox."
+        )
+    if any(separator in raw_value for separator in ("/", "\\")) or Path(raw_value).drive:
+        raise IncrementalMetadataSyncError(
+            f"Invalid source input '{source_csv_path}'. Pass only file name (example: Test_DataFile_Feb.csv), not a path."
+        )
+    file_name = Path(raw_value).name.strip()
+    if not file_name:
+        raise IncrementalMetadataSyncError(
+            f"Invalid source input '{source_csv_path}'. Pass a non-empty CSV file name."
+        )
+    if not file_name.lower().endswith(".csv"):
+        raise IncrementalMetadataSyncError(
+            f"Invalid source file '{file_name}'. Only .csv source files are supported."
+        )
+    return file_name
+
+def _is_data_management_outbox_file(remote_name_lower: str) -> bool:
+    # Exclude known Data Management outbox prefixes while scanning application files.
+    return remote_name_lower.startswith(("outbox/al-dm-", "outbox/al_dm-"))
+
+def _application_file_priority(remote_name_lower: str) -> int | None:
+    # 0: application root file, 1: application inbox/outbox file, None: unsupported location.
+    if "/" not in remote_name_lower:
+        return 0
+    if remote_name_lower.startswith("inbox/") or remote_name_lower.startswith("outbox/"):
+        return 1
+    return None
+
+def _find_source_csv_in_inbox_outbox(api: "EpbcsRestClient", source_file_name: str) -> str:
+    list_resp = api.list_files_in_interop()
+    if not list_resp.get("ok_http"):
+        raise IncrementalMetadataSyncError(
+            f"Could not list Interop files to locate source CSV '{source_file_name}': {list_resp}"
+        )
+
+    data = list_resp.get("data")
+    items = data.get("items") if isinstance(data, dict) else None
+    if not isinstance(items, list):
+        raise IncrementalMetadataSyncError(
+            f"Invalid Interop file list response while locating '{source_file_name}': {list_resp}"
+        )
+
+    matches: list[tuple[int, str]] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        remote_name = str(item.get("name") or "").strip()
+        if not remote_name:
+            continue
+        remote_name_lower = remote_name.lower()
+        if not remote_name_lower.endswith(".csv"):
+            continue
+        if remote_name.rsplit("/", 1)[-1] != source_file_name:
+            continue
+        if _is_data_management_outbox_file(remote_name_lower):
+            continue
+        priority = _application_file_priority(remote_name_lower)
+        if priority is None:
+            continue
+        matches.append((priority, remote_name))
+
+    if not matches:
+        raise IncrementalMetadataSyncError(
+            f"Source CSV '{source_file_name}' was not found in EPBCS application files (root/Inbox/Outbox)."
+        )
+    best_priority = min(priority for priority, _ in matches)
+    preferred_matches = [name for priority, name in matches if priority == best_priority]
+    if len(preferred_matches) > 1:
+        sample_matches = ", ".join(preferred_matches[:10])
+        if len(preferred_matches) > 10:
+            sample_matches = f"{sample_matches}, ..."
+        raise IncrementalMetadataSyncError(
+            f"Multiple application files matched '{source_file_name}'. "
+            f"Please make the file name unique. Matches: {sample_matches}"
+        )
+    return preferred_matches[0]
+
+def _resolve_source_csv_path(
+    api: "EpbcsRestClient",
+    config: RunConfig,
+    source_csv_path: str,
+) -> tuple[Path, str]:
+    source_file_name = _normalize_source_csv_file_name(source_csv_path)
+    remote_source_path = _find_source_csv_in_inbox_outbox(api, source_file_name)
+    destination_path = (config.working_dir / source_file_name).resolve()
+
+    download_result = api.download_file_from_interop(remote_source_path, destination_path)
+    if not download_result.get("ok"):
+        raise IncrementalMetadataSyncError(
+            f"Failed to download source file '{remote_source_path}' into '{destination_path}': {download_result}"
+        )
+    if not destination_path.exists():
+        raise IncrementalMetadataSyncError(
+            f"Downloaded source CSV is missing at expected path: {destination_path}"
+        )
+    return destination_path, remote_source_path
 
 def _read_template_header(template_csv_path: Path) -> list[str]:
     if not template_csv_path.exists():
@@ -755,6 +901,104 @@ class EpbcsRestClient:
             path=f"/status/jobs/{job_id}",
             fetch_error="Could not fetch interop job status",
         )
+
+    def wait_for_interop_download(self, job_id: str) -> dict[str, Any]:
+        return self._wait_for_job(
+            service="interop",
+            path=f"/status/download/{job_id}",
+            fetch_error="Could not fetch Interop download status",
+        )
+
+    def list_files_in_interop(self) -> dict[str, Any]:
+        return self.request("GET", "interop", "/files/list")
+
+    def _download_binary_from_interop_job(self, job_id: str) -> tuple[bool, bytes | str]:
+        download_url = self._build_url("interop", f"/files/download/{job_id}")
+        try:
+            with httpx.Client(
+                verify=self.config.verify_ssl,
+                timeout=self.config.timeout_seconds,
+                follow_redirects=True,
+            ) as client:
+                response = client.get(
+                    download_url,
+                    headers=self._headers({"Accept": "*/*"}),
+                    auth=self._auth(),
+                )
+        except httpx.RequestError as exc:
+            return False, str(exc)
+
+        if not (200 <= response.status_code < 300):
+            return (
+                False,
+                f"Download content request failed with HTTP {response.status_code}: {response.text}",
+            )
+
+        content_type = response.headers.get("content-type", "").lower()
+        if "application/json" in content_type:
+            return False, f"Expected binary content, received JSON: {response.text}"
+
+        return True, response.content
+
+    def download_file_from_interop(
+        self,
+        remote_file_name: str,
+        local_file_path: Path,
+        *,
+        delete_temporary_download: bool = True,
+    ) -> dict[str, Any]:
+        request_resp = self.request(
+            "POST",
+            "interop",
+            "/files/download",
+            json_body={"fileName": remote_file_name},
+        )
+        if not request_resp.get("ok_http"):
+            return self._step_failure("request_download", request_resp)
+
+        download_job_id = self._extract_job_id(request_resp.get("data"))
+        if not download_job_id:
+            return self._step_failure(
+                "request_download",
+                request_resp,
+                error="Could not derive download job id",
+            )
+
+        wait_resp = self.wait_for_interop_download(download_job_id)
+        if not wait_resp.get("ok"):
+            return self._step_failure(
+                "wait_download",
+                wait_resp,
+                job_id=download_job_id,
+                request_response=request_resp,
+            )
+
+        binary_ok, binary_content = self._download_binary_from_interop_job(download_job_id)
+        if not binary_ok:
+            return self._step_failure(
+                "download_bytes",
+                {"error": binary_content},
+                job_id=download_job_id,
+                request_response=request_resp,
+                wait_response=wait_resp,
+            )
+
+        local_file_path.parent.mkdir(parents=True, exist_ok=True)
+        local_file_path.write_bytes(binary_content)
+
+        delete_resp: dict[str, Any] | None = None
+        if delete_temporary_download:
+            delete_resp = self.request("DELETE", "interop", f"/files/download/{download_job_id}")
+
+        return {
+            "ok": True,
+            "job_id": download_job_id,
+            "remote_file_name": remote_file_name,
+            "local_file_path": str(local_file_path),
+            "request_response": request_resp,
+            "wait_response": wait_resp,
+            "delete_response": delete_resp,
+        }
 
     def run_import_metadata_job(
         self,
@@ -1375,10 +1619,15 @@ def pbcs_run_incmetadata_sync(
     require_human_validation: bool = True,
     human_validation_timeout_seconds: int = 300,
 ) -> dict[str, Any]:
-    """Incremental metadata sync runner."""
+    """Incremental metadata sync runner.
+
+    source_csv_path expects only the source CSV file name present in EPBCS Inbox/Outbox.
+    """
     # Backward compatibility: manual validation is blocking, mandatory for every run, and no longer time-limited.
     _ = require_human_validation
     _ = human_validation_timeout_seconds
+
+    startup_instruction_path, startup_instruction_content = _read_startup_instruction_markdown()
 
     load_dotenv(override=False)
 
@@ -1390,7 +1639,11 @@ def pbcs_run_incmetadata_sync(
     api = EpbcsRestClient(config)
     _assert_environment_available(api)
 
-    source_path = Path(source_csv_path).expanduser().resolve()
+    source_path, source_remote_path = _resolve_source_csv_path(
+        api=api,
+        config=config,
+        source_csv_path=source_csv_path,
+    )
     template_path = _resolve_default_template_path()
     cube_name = _resolve_cube_name()
     mapping_path = _resolve_mapping_path(mapping_csv_path, prompt_if_missing=prompt_for_missing_mapping)
@@ -1406,7 +1659,11 @@ def pbcs_run_incmetadata_sync(
         "ok": True,
         "app_name": config.app_name,
         "cube_name": cube_name,
+        "startup_instruction_markdown_path": str(startup_instruction_path),
+        "startup_instruction_markdown_lines": len(startup_instruction_content.splitlines()),
         "source_csv_path": str(source_path),
+        "source_csv_file_name": source_path.name,
+        "source_csv_inbox_outbox_path": source_remote_path,
         "mapping_csv_path": str(mapping_path),
         "template_csv_path": str(template_path),
         "dry_run": dry_run,
@@ -1488,7 +1745,11 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(description="Run EPBCS incremental metadata sync.")
     add = parser.add_argument
-    add("--source", required=True, help="Path to source data CSV file")
+    add(
+        "--source",
+        required=True,
+        help="Source CSV file name from EPBCS Inbox/Outbox (example: Test_DataFile_Feb.csv)",
+    )
     add("--mapping", default=None, help="Path to FileColtoDim.csv")
     add("--app", default=None, help="Override EPBCS app name")
     add("--workdir", default=None, help="Working directory for generated files")
