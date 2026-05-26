@@ -24,6 +24,9 @@ except ImportError:  # pragma: no cover
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 
+DEFAULT_TEMPLATE_CSV_REL_PATH = Path("Files") / "Metadata_Template.csv"
+DEFAULT_CUBE_NAME = "OEP_FS"
+
 class IncrementalMetadataSyncError(RuntimeError):
     """Raised for functional failures in incremental metadata sync."""
 
@@ -146,6 +149,12 @@ def _resolve_mapping_path(mapping_csv_path: str | None, prompt_if_missing: bool)
     raise IncrementalMetadataSyncError(
         "Could not find FileColtoDim.csv. Pass mapping_csv_path or place it under ./Files."
     )
+
+def _resolve_default_template_path() -> Path:
+    return (Path.cwd() / DEFAULT_TEMPLATE_CSV_REL_PATH).resolve()
+
+def _resolve_cube_name() -> str:
+    return (os.getenv("EPBCS_CUBE_NAME") or DEFAULT_CUBE_NAME).strip()
 
 def _read_template_header(template_csv_path: Path) -> list[str]:
     if not template_csv_path.exists():
@@ -1008,16 +1017,25 @@ def _write_validation_required_note(
 def _wait_for_human_validation_for_run(
     validation_records: list[dict[str, Any]],
     note_path: Path,
+    *,
+    pending_action_count: int,
+    dry_run: bool,
 ) -> dict[str, Any]:
     dimension_count = len(validation_records)
     mapping_count = sum(len((record.get("child_parent_pairs") or [])) for record in validation_records)
+    if dry_run:
+        proceed_line = "[Validation] Do you want to proceed and complete this dry-run execution?"
+    elif pending_action_count > 0:
+        proceed_line = "[Validation] Do you want to proceed with next steps (upload + import jobs)?"
+    else:
+        proceed_line = "[Validation] Do you want to proceed and complete this execution? (No upload/import jobs are pending.)"
     prompt_lines = [
         "",
         "[Validation] Consolidated approval required for this run.",
         f"[Validation] Dimensions requiring validation: {dimension_count}",
         f"[Validation] Total new member-parent mappings: {mapping_count}",
         f"[Validation] Review file: {note_path}",
-        "[Validation] Do you want to proceed with next steps (upload + import jobs)?",
+        proceed_line,
         "[Validation] Enter Yes/No and press Enter to continue: ",
     ]
     note_content = ""
@@ -1348,8 +1366,6 @@ def _job_result_summary(result: dict[str, Any]) -> dict[str, Any]:
 
 def pbcs_run_incmetadata_sync(
     source_csv_path: str,
-    template_csv_path: str,
-    cube_name: str,
     mapping_csv_path: str | None = None,
     app_name: str | None = None,
     working_dir: str | None = None,
@@ -1360,7 +1376,8 @@ def pbcs_run_incmetadata_sync(
     human_validation_timeout_seconds: int = 300,
 ) -> dict[str, Any]:
     """Incremental metadata sync runner."""
-    # Backward compatibility: manual validation is now blocking and no longer time-limited.
+    # Backward compatibility: manual validation is blocking, mandatory for every run, and no longer time-limited.
+    _ = require_human_validation
     _ = human_validation_timeout_seconds
 
     load_dotenv(override=False)
@@ -1374,7 +1391,8 @@ def pbcs_run_incmetadata_sync(
     _assert_environment_available(api)
 
     source_path = Path(source_csv_path).expanduser().resolve()
-    template_path = Path(template_csv_path).expanduser().resolve()
+    template_path = _resolve_default_template_path()
+    cube_name = _resolve_cube_name()
     mapping_path = _resolve_mapping_path(mapping_csv_path, prompt_if_missing=prompt_for_missing_mapping)
 
     deleted_old_notes = _cleanup_old_validation_required_files(config.working_dir, days_to_keep=7)
@@ -1392,7 +1410,7 @@ def pbcs_run_incmetadata_sync(
         "mapping_csv_path": str(mapping_path),
         "template_csv_path": str(template_path),
         "dry_run": dry_run,
-        "human_validation_enabled": require_human_validation,
+        "human_validation_enabled": True,
         "human_validation_mode": "blocking_yes_no",
         "old_validation_note_files_deleted": deleted_old_notes,
         "dimensions": [],
@@ -1414,18 +1432,19 @@ def pbcs_run_incmetadata_sync(
         if validation_record:
             validation_records.append(validation_record)
 
-    if require_human_validation and validation_records:
-        note_path = _write_validation_required_note(config.working_dir, validation_records)
-        summary["human_validation_note_path"] = str(note_path)
-        validation_feedback = _wait_for_human_validation_for_run(
-            validation_records=validation_records,
-            note_path=note_path,
-        )
-        summary["human_validation"] = validation_feedback
-        for action in pending_upload_actions:
-            action["dimension_result"]["human_validation"] = validation_feedback
-        if not validation_feedback.get("approved"):
-            _raise_validation_rejected(validation_feedback, note_path)
+    note_path = _write_validation_required_note(config.working_dir, validation_records)
+    summary["human_validation_note_path"] = str(note_path)
+    validation_feedback = _wait_for_human_validation_for_run(
+        validation_records=validation_records,
+        note_path=note_path,
+        pending_action_count=len(pending_upload_actions),
+        dry_run=dry_run,
+    )
+    summary["human_validation"] = validation_feedback
+    for action in pending_upload_actions:
+        action["dimension_result"]["human_validation"] = validation_feedback
+    if not validation_feedback.get("approved"):
+        _raise_validation_rejected(validation_feedback, note_path)
 
     if dry_run:
         for action in pending_upload_actions:
@@ -1470,35 +1489,30 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run EPBCS incremental metadata sync.")
     add = parser.add_argument
     add("--source", required=True, help="Path to source data CSV file")
-    add("--template", required=True, help="Path to Metadata_Template.csv")
-    add("--cube", required=True, help="Cube/plan type name")
     add("--mapping", default=None, help="Path to FileColtoDim.csv")
     add("--app", default=None, help="Override EPBCS app name")
     add("--workdir", default=None, help="Working directory for generated files")
     add("--similarity-threshold", type=float, default=0.72, help="Similarity threshold for parent derivation")
     add("--dry-run", action="store_true", help="Only create ZIP payloads locally, do not upload or run jobs")
     add("--no-prompt", action="store_true", help="Do not prompt when FileColtoDim.csv is missing")
-    add("--skip-human-validation", action="store_true", help="Skip manual yes/no validation after ZIP generation")
     add(
         "--human-validation-timeout-seconds",
         type=int,
         default=300,
-        help="Deprecated: ignored because validation now blocks until Yes/No input",
+        help="Deprecated: ignored because validation is mandatory and blocks until Yes/No input",
     )
 
     args = parser.parse_args()
     try:
         result = pbcs_run_incmetadata_sync(
             source_csv_path=args.source,
-            template_csv_path=args.template,
-            cube_name=args.cube,
             mapping_csv_path=args.mapping,
             app_name=args.app,
             working_dir=args.workdir,
             similarity_threshold=args.similarity_threshold,
             dry_run=args.dry_run,
             prompt_for_missing_mapping=not args.no_prompt,
-            require_human_validation=not args.skip_human_validation,
+            require_human_validation=True,
             human_validation_timeout_seconds=args.human_validation_timeout_seconds,
         )
         print(json.dumps(result, indent=2))
